@@ -20,6 +20,7 @@ GPIO_0 is Grounded to enable the programming mode of ESP8266.
 #include <ESP8266WiFi.h>
 #include <Wire.h>
 
+// ****************** MPU6050 **********************
 /*
 Accelerometer readings from Adafruit MPU6050
 
@@ -35,7 +36,7 @@ Arduino Guide: https://RandomNerdTutorials.com/arduino-mpu-6050-accelerometer-gy
 Adafruit_MPU6050 mpu(0, 2); //sda, scl pins
 
 
-byte ledPin = 2;
+//byte ledPin = 2;
 char ssid[] = "Game-Event";           // SSID of your AP
 char pass[] = "Event-Game";         // password of your AP
 
@@ -47,6 +48,23 @@ const String sensor_side = "r"; // "l" or "r"
 const uint8_t amplitude_gain = 25;
 const uint8_t amplitude_min = 0;
 const uint8_t amplitude_max = 255;
+// ****************************************************
+
+
+// ****************** Neopixel **********************
+#include <Adafruit_NeoPixel.h>
+
+#define PIN       3 //3 - Rx pin // Which pin on the Arduino is connected to the NeoPixels?
+#define NUMPIXELS 1  // How many NeoPixels are attached to the Arduino?
+
+/*
+When setting up the NeoPixel library, we tell it how many pixels,
+and which pin to use to send signals. Note that for older NeoPixel
+strips you might need to change the third parameter -- see the
+strandtest example for more information on possible values.
+*/
+Adafruit_NeoPixel pixels(NUMPIXELS, PIN, NEO_GRB + NEO_KHZ800);
+// ****************************************************
 
 
 float absolute(float x){
@@ -68,13 +86,25 @@ int get_amplitude(float gyro_x, float gyro_y, float gyro_z){
 
 void setup() {
   Serial.begin(115200);
+
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, pass);           // connects to the WiFi AP
+
+  pixels.begin(); // INITIALIZE NeoPixel strip object (REQUIRED)
+  pixels.clear(); // Set all pixel colors to 'off'
+
   Serial.println();
   Serial.println("Connection to the AP");
   while (WiFi.status() != WL_CONNECTED) {
     Serial.print(".");
-    delay(500);
+
+    pixels.setPixelColor(0, pixels.Color(35, 35, 0));
+    pixels.show();   // Send the updated pixel colors to the hardware.
+    delay(250);
+
+    pixels.setPixelColor(0, pixels.Color(0, 0, 0));
+    pixels.show();   // Send the updated pixel colors to the hardware.
+    delay(250);
   }
   Serial.println();
   Serial.println("Connected");
@@ -93,7 +123,13 @@ void setup() {
   if (!mpu.begin()) {
     Serial.println("Failed to find MPU6050 chip");
     while (1) {
-      delay(10);
+      pixels.setPixelColor(0, pixels.Color(35, 0, 0));
+      pixels.show();   // Send the updated pixel colors to the hardware.
+      delay(300);
+
+      pixels.setPixelColor(0, pixels.Color(0, 0, 0));
+      pixels.show();   // Send the updated pixel colors to the hardware.
+      delay(700);
     }
   }
   Serial.println("MPU6050 Found!");
@@ -162,26 +198,40 @@ void setup() {
 }
 
 void loop() {
-  client.connect(server, 80);
-  //digitalWrite(ledPin, LOW);
+  if (client.connect(server, 80)){
+    /* Get new sensor events with the readings */
+    sensors_event_t a, g, temp;
+    mpu.getEvent(&a, &g, &temp);
 
-  /* Get new sensor events with the readings */
-  sensors_event_t a, g, temp;
-  mpu.getEvent(&a, &g, &temp);
+    String value_str = String(get_amplitude(g.gyro.x, g.gyro.y, g.gyro.z));
+    value_str = sensor_side + value_str + "\r";
 
-  String value_str = String(get_amplitude(g.gyro.x, g.gyro.y, g.gyro.z));
-  value_str = sensor_side + value_str + "\r";
+    int size = client.print(value_str);
+    Serial.println(value_str); //Byte sent to the AP
+    //Serial.println(size); //Byte sent to the AP
 
-  int size = client.print(value_str);
-  Serial.println(value_str); //Byte sent to the AP
-  //Serial.println(size); //Byte sent to the AP
+    //String answer = client.readStringUntil('\r');
+    //Serial.println("From the AP: " + answer);
+    
+    //digitalWrite(ledPin, LOW);
 
-  //String answer = client.readStringUntil('\r');
-  //Serial.println("From the AP: " + answer);
-  
-  client.flush();
-  //digitalWrite(ledPin, HIGH);
-  client.stop();
+    pixels.setPixelColor(0, pixels.Color(0, 35, 0));
+    pixels.show();   // Send the updated pixel colors to the hardware.
+
+    client.flush();
+    //digitalWrite(ledPin, HIGH);
+    
+    client.stop();
+  }
+  else{
+    Serial.println("Can't connect to the base station..");
+    
+    pixels.setPixelColor(0, pixels.Color(35, 0, 0));
+    pixels.show();   // Send the updated pixel colors to the hardware.
+  }
+
+  pixels.setPixelColor(0, pixels.Color(0, 0, 0));
+  pixels.show();   // Send the updated pixel colors to the hardware.
   
   delay(200);
 }
